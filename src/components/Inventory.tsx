@@ -374,16 +374,6 @@ export default function Inventory({ initialCategoryFilter = 'all' }: InventoryPr
                         )} />
                         <span className="text-xs font-medium text-gray-600 capitalize">{product.status}</span>
                       </div>
-                      {product.parent_id && (
-                        <span className="text-[8px] font-bold text-blue-500 uppercase tracking-tighter">
-                          Vinculado a {products.find(p => p.id === product.parent_id)?.code}
-                        </span>
-                      )}
-                      {product.parent_id && product.status === 'inactive' && product.stock === 0 && (
-                        <span className="text-[8px] font-bold text-red-500 uppercase tracking-tighter">
-                          Stock insuficiente para paquete
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
@@ -533,15 +523,6 @@ export default function Inventory({ initialCategoryFilter = 'all' }: InventoryPr
                           />
                         </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-bold text-gray-700">Descripción</label>
-                        <textarea 
-                          rows={3}
-                          className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500"
-                          value={formData.description || ''}
-                          onChange={(e) => setFormData({...formData, description: e.target.value})}
-                        />
-                      </div>
                     </div>
 
                     <div className="space-y-4">
@@ -678,56 +659,6 @@ export default function Inventory({ initialCategoryFilter = 'all' }: InventoryPr
                         </div>
                       </div>
                     </div>
-
-                      <div className="md:col-span-2 space-y-4">
-                        <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                          <h4 className="text-sm font-bold text-blue-900 mb-3 flex items-center gap-2">
-                            <Package size={16} />
-                            Inventario Vinculado (Opcional)
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-blue-700">Vincular con Producto Base</label>
-                              <select 
-                                className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                                value={formData.parent_id}
-                                onChange={(e) => setFormData({...formData, parent_id: e.target.value})}
-                              >
-                                <option value="">Ninguno (Producto Independiente)</option>
-                                {products
-                                  .filter(p => p.id !== editingProduct?.id && !p.parent_id)
-                                  .map(p => (
-                                    <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
-                                  ))
-                                }
-                              </select>
-                              <p className="text-[10px] text-blue-500">Si seleccionas un producto, este producto usará el stock del producto base.</p>
-                            </div>
-                            <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-blue-700">Unidades por Paquete</label>
-                              <input 
-                                type="number"
-                                min="1"
-                                className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                                value={formData.units_per_package}
-                                onChange={(e) => setFormData({...formData, units_per_package: e.target.value})}
-                                disabled={!formData.parent_id}
-                              />
-                              <p className="text-[10px] text-blue-500">Ej: 10 para caja de 10, 20 para caja de 20.</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-sm font-bold text-gray-700">Descripción</label>
-                          <textarea 
-                            rows={2}
-                            className="w-full px-4 py-2.5 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-green-500"
-                            value={formData.description || ''}
-                            onChange={(e) => setFormData({...formData, description: e.target.value})}
-                          />
-                        </div>
-                      </div>
                   </div>
 
                   {formData.has_serials && (

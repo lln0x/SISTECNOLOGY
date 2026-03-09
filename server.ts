@@ -506,16 +506,18 @@ async function startServer() {
 
       // Low Stock Products
       const lowStockProducts = db.prepare(`
-        SELECT id, name, min_stock,
-        CASE WHEN has_serials = 1 
-          THEN (SELECT COUNT(*) FROM product_items WHERE product_id = p.id AND status = 'available') 
-          ELSE stock 
-        END as stock
-        FROM products p
-        WHERE stock <= min_stock 
-        ORDER BY stock ASC 
+        SELECT * FROM (
+          SELECT id, name, min_stock,
+          CASE WHEN has_serials = 1 
+            THEN (SELECT COUNT(*) FROM product_items WHERE product_id = p.id AND status = 'available') 
+            ELSE stock 
+          END as current_stock
+          FROM products p
+        )
+        WHERE current_stock <= min_stock 
+        ORDER BY current_stock ASC 
         LIMIT 5
-      `).all();
+      `).all().map((p: any) => ({ ...p, stock: p.current_stock }));
 
       const stats = {
         dailySales,
@@ -592,28 +594,10 @@ async function startServer() {
     // Create a map for quick parent lookup
     const productMap = new Map(products.map(p => [p.id, p]));
 
-    // Process products to handle linked inventory and serials
+    // Process products to handle serials
     const processedProducts = products.map(p => {
       let stock = p.has_serials ? p.dynamic_stock : p.stock;
       let status = p.status;
-      
-      // If it has a parent, stock is based on parent's stock
-      if (p.parent_id) {
-        const parent = productMap.get(p.parent_id);
-        if (parent) {
-          const parentStock = parent.has_serials ? 
-            (db.prepare("SELECT COUNT(*) as count FROM product_items WHERE product_id = ? AND status = 'available'").get(p.parent_id) as any).count : 
-            parent.stock;
-          
-          const unitsPerPackage = p.units_per_package || 1;
-          stock = Math.floor(parentStock / unitsPerPackage);
-          
-          // Automatically deactivate if not enough stock for a full package
-          if (parentStock < unitsPerPackage) {
-            status = 'inactive';
-          }
-        }
-      }
 
       return {
         ...p,
@@ -631,7 +615,7 @@ async function startServer() {
   });
 
   app.post("/api/products", (req, res) => {
-    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers, parent_id, units_per_package } = req.body;
+    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, image, has_serials, serial_numbers } = req.body;
     
     // Generate code
     const category = db.prepare("SELECT prefix FROM categories WHERE id = ?").get(category_id) as any;
@@ -663,9 +647,9 @@ async function startServer() {
       }
 
       const info = db.prepare(`
-        INSERT INTO products (code, name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, parent_id, units_per_package)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(code, name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, has_serials ? 1 : 0, parent_id || null, units_per_package || 1);
+        INSERT INTO products (code, name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, image, has_serials)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(code, name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, image, has_serials ? 1 : 0);
       
       const productId = info.lastInsertRowid;
 
@@ -807,7 +791,7 @@ async function startServer() {
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(saleId, item.id, item.quantity, item.price, item.quantity * item.price, JSON.stringify(item.serial_numbers || []));
         
-        const product = db.prepare("SELECT has_serials, parent_id, units_per_package FROM products WHERE id = ?").get(item.id) as any;
+        const product = db.prepare("SELECT has_serials FROM products WHERE id = ?").get(item.id) as any;
         
         if (product && product.has_serials) {
           // Delete specific items as they are sold and should not be kept in product_items
@@ -829,9 +813,6 @@ async function startServer() {
               deleteItem.run(pi.id);
             }
           }
-        } else if (product && product.parent_id) {
-          // Subtract from parent stock
-          db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity * (product.units_per_package || 1), product.parent_id);
         } else {
           db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity, item.id);
         }
@@ -888,7 +869,7 @@ async function startServer() {
 
   app.put("/api/products/:id", (req, res) => {
     const { id } = req.params;
-    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers, parent_id, units_per_package } = req.body;
+    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, image, has_serials, serial_numbers } = req.body;
     
     // Check if category changed to regenerate code
     const currentProduct = db.prepare("SELECT category_id, code FROM products WHERE id = ?").get(id) as any;
@@ -923,9 +904,9 @@ async function startServer() {
 
       db.prepare(`
         UPDATE products 
-        SET name = ?, category_id = ?, purchase_price = ?, sale_price = ?, stock = ?, min_stock = ?, unit = ?, brand = ?, supplier_id = ?, description = ?, image = ?, code = ?, has_serials = ?, parent_id = ?, units_per_package = ?
+        SET name = ?, category_id = ?, purchase_price = ?, sale_price = ?, stock = ?, min_stock = ?, unit = ?, brand = ?, supplier_id = ?, image = ?, code = ?, has_serials = ?
         WHERE id = ?
-      `).run(name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, code, has_serials ? 1 : 0, parent_id || null, units_per_package || 1, id);
+      `).run(name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, image, code, has_serials ? 1 : 0, id);
 
       if (has_serials && Array.isArray(serial_numbers)) {
         const currentItems = db.prepare("SELECT serial_number FROM product_items WHERE product_id = ?").all(id) as any[];

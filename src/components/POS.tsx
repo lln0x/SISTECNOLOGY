@@ -54,6 +54,7 @@ export default function POS() {
   const [lastSaleId, setLastSaleId] = useState<number | null>(null);
   const [isQuotation, setIsQuotation] = useState(false);
   const [lastQuotationId, setLastQuotationId] = useState<number | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
   
   // Serial selection states
   const [isSerialModalOpen, setIsSerialModalOpen] = useState(false);
@@ -74,6 +75,20 @@ export default function POS() {
   const [payments, setPayments] = useState<{ method: string; amount: number }[]>([]);
 
   const ticketRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showTicket && (lastSaleId || lastQuotationId)) {
+      const saleIdStr = isQuotation 
+        ? `#C${String(lastQuotationId).padStart(6, '0')}` 
+        : `#V${String(lastSaleId).padStart(6, '0')}`;
+      
+      QRCode.toDataURL(saleIdStr, { margin: 1, width: 256 })
+        .then(setQrDataUrl)
+        .catch(err => console.error('Error generating QR code:', err));
+    } else {
+      setQrDataUrl('');
+    }
+  }, [showTicket, lastSaleId, lastQuotationId, isQuotation]);
 
   const fetchData = () => {
     Promise.all([
@@ -344,13 +359,6 @@ export default function POS() {
       ? `#C${String(lastQuotationId).padStart(6, '0')}` 
       : `#V${String(lastSaleId).padStart(6, '0')}`;
     
-    let qrDataUrl = '';
-    try {
-      qrDataUrl = await QRCode.toDataURL(saleIdStr, { margin: 1, width: 128 });
-    } catch (err) {
-      console.error('Error generating QR code:', err);
-    }
-
     const windowPrint = window.open('', '', 'left=0,top=0,width=900,height=1000,toolbar=0,scrollbars=0,status=0');
     if (!windowPrint) return;
 
@@ -368,517 +376,47 @@ export default function POS() {
         <head>
           <title>${title}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
             @page { 
               size: ${isA4 ? 'A4' : `${ticketSize} auto`}; 
-              margin: ${isA4 ? '10mm' : '0'}; 
+              margin: 0; 
             }
             body { 
-              font-family: ${isA4 ? "'Inter', sans-serif" : ticketFontFamily}; 
-              font-weight: ${isA4 ? 'normal' : ticketFontWeight};
-              font-style: ${isA4 ? 'normal' : ticketFontStyle};
-              width: ${bodyWidth}; 
               margin: 0; 
-              padding: ${isA4 ? '0' : '4mm'};
-              font-size: ${isA4 ? '12px' : '11px'};
-              line-height: 1.3;
-              color: #000;
-              background-color: #fff;
-              -webkit-print-color-adjust: exact;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .font-black { font-weight: 900; }
-            .uppercase { text-transform: uppercase; }
-            
-            img {
-              max-width: 100%;
-              max-height: 60px;
-              object-fit: contain;
-              display: block;
-              margin: 0 auto 8px auto;
-            }
-
-            .divider {
-              border-top: 1px dashed #000;
-              margin: 8px 0;
-            }
-
-            .item-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 4px;
-            }
-
-            .item-name {
-              flex: 1;
-              text-align: left;
-              padding-right: 8px;
-              font-weight: bold;
-            }
-
-            .total-row {
-              display: flex;
-              justify-content: space-between;
-              font-weight: 900;
-              font-size: 13px;
-              margin-top: 4px;
-            }
-            
-            /* A4 Specific Styles */
-            .a4-page {
-              position: relative;
-              width: 100%;
-              min-height: 297mm;
-              padding: 10mm;
-              box-sizing: border-box;
-            }
-            
-            .a4-header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              margin-bottom: 30px;
-              border-bottom: 3px solid ${primaryColor};
-              padding-bottom: 20px;
-            }
-
-            .a4-brand {
-              display: flex;
-              align-items: center;
-              gap: 20px;
-            }
-
-            .a4-logo-box {
-              width: 80px;
-              height: 80px;
-              background: ${primaryColor};
-              border-radius: 12px;
               display: flex;
               align-items: center;
               justify-content: center;
-              color: white;
-              font-size: 40px;
-              font-weight: 900;
-              box-shadow: 0 4px 10px ${primaryColor}44;
+              height: 100vh;
+              background-color: #fff;
             }
-
-            .a4-logo-img {
-              width: 80px;
-              height: 80px;
-              object-fit: contain;
+            .qr-container {
+              text-align: center;
+              padding: 20px;
             }
-
-            .a4-business-info h2 {
-              margin: 0;
-              font-size: 22px;
-              font-weight: 800;
-              color: #111;
-              letter-spacing: -0.5px;
-              line-height: 1.1;
-              word-wrap: break-word;
-              max-width: 450px;
-            }
-
-            .a4-business-info p {
-              margin: 2px 0;
-              color: #666;
-              font-size: 11px;
-              font-weight: 500;
-            }
-
-            .a4-doc-info {
-              text-align: right;
-            }
-
-            .a4-doc-type {
-              font-size: 36px;
-              font-weight: 900;
-              color: ${primaryColor};
-              margin: 0;
-              line-height: 1;
-              letter-spacing: -1px;
-            }
-
-            .a4-doc-number {
-              font-size: 18px;
-              font-weight: 700;
-              color: #333;
-              margin: 5px 0;
-            }
-
-            .a4-doc-date {
-              font-size: 12px;
-              color: #888;
-              font-weight: 600;
-            }
-
-            .a4-grid {
-              display: grid;
-              grid-template-columns: 1.5fr 1fr;
-              gap: 30px;
-              margin-bottom: 30px;
-            }
-
-            .a4-section {
-              background: #fcfcfc;
-              border: 1px solid #f0f0f0;
-              border-radius: 12px;
-              padding: 15px;
-            }
-
-            .a4-section-label {
-              font-size: 9px;
-              font-weight: 800;
-              color: ${primaryColor};
-              text-transform: uppercase;
-              letter-spacing: 1.5px;
-              margin-bottom: 10px;
+            img {
+              width: 200px;
+              height: 200px;
               display: block;
-              border-bottom: 1px solid #eee;
-              padding-bottom: 5px;
+              margin: 0 auto;
             }
-
-            .a4-client-name {
-              font-size: 16px;
-              font-weight: 800;
-              color: #111;
-              margin: 0 0 5px 0;
-            }
-
-            .a4-client-detail {
-              font-size: 11px;
-              color: #555;
-              margin: 2px 0;
-              font-weight: 500;
-            }
-
-            .a4-condition-row {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 4px;
-              font-size: 11px;
-            }
-
-            .a4-condition-label {
-              color: #888;
-              font-weight: 600;
-            }
-
-            .a4-condition-value {
-              color: #111;
-              font-weight: 700;
-            }
-
-            .a4-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 30px;
-              border-radius: 8px;
-              overflow: hidden;
-              border: 1px solid #eee;
-            }
-
-            .a4-table th {
-              background: ${primaryColor};
-              color: white;
-              padding: 12px;
-              text-align: left;
-              font-size: 10px;
-              font-weight: 800;
-              text-transform: uppercase;
-              letter-spacing: 1px;
-            }
-
-            .a4-table td {
-              padding: 12px;
-              border-bottom: 1px solid #eee;
+            .label {
+              font-family: sans-serif;
               font-size: 12px;
-              color: #333;
-            }
-
-            .a4-table tr:nth-child(even) {
-              background: #f9f9f9;
-            }
-
-            .a4-table .col-num { width: 30px; text-align: center; color: #999; font-weight: 700; }
-            .a4-table .col-desc { font-weight: 700; }
-            .a4-table .col-qty { text-align: center; width: 60px; font-weight: 600; }
-            .a4-table .col-price { text-align: right; width: 100px; font-weight: 600; }
-            .a4-table .col-total { text-align: right; width: 100px; font-weight: 800; color: #111; }
-
-            .a4-summary-grid {
-              display: grid;
-              grid-template-columns: 1fr 300px;
-              gap: 40px;
-            }
-
-            .a4-extra-info h4 {
-              font-size: 10px;
-              font-weight: 800;
-              color: #111;
+              font-weight: bold;
+              margin-top: 10px;
+              color: #000;
               text-transform: uppercase;
-              margin: 0 0 10px 0;
               letter-spacing: 1px;
             }
-
-            .a4-bank-details {
-              font-size: 10px;
-              color: #666;
-              background: #f8f9fa;
-              padding: 12px;
-              border-radius: 8px;
-              margin-bottom: 15px;
-            }
-
-            .a4-bank-row {
-              display: flex;
-              gap: 10px;
-              margin-bottom: 3px;
-            }
-
-            .a4-bank-label { font-weight: 700; color: #444; min-width: 60px; }
-
-            .a4-totals-box {
-              background: #fff;
-            }
-
-            .a4-total-line {
-              display: flex;
-              justify-content: space-between;
-              padding: 8px 0;
-              border-bottom: 1px solid #f0f0f0;
-              font-size: 13px;
-            }
-
-            .a4-total-line.grand-total {
-              background: #1a1a1a;
-              color: white;
-              padding: 15px;
-              border-radius: 10px;
-              font-size: 20px;
-              font-weight: 900;
-              margin-top: 10px;
-              border-bottom: none;
-            }
-
-            .a4-signatures {
-              display: flex;
-              justify-content: space-around;
-              margin-top: 60px;
-              margin-bottom: 40px;
-            }
-
-            button, .no-print { display: none !important; }
           </style>
         </head>
         <body>
-          ${isA4 ? `
-            <div class="a4-page">
-              
-              <div class="a4-header">
-                <div class="a4-brand">
-                  ${settings?.business_logo ? 
-                    `<img src="${settings.business_logo}" class="a4-logo-img" />` : 
-                    `<div class="a4-logo-box">${settings?.business_name?.charAt(0) || 'M'}</div>`
-                  }
-                  <div class="a4-business-info">
-                    <h2>${settings?.business_name}</h2>
-                    <p>${settings?.address}</p>
-                    <p>Telf: ${settings?.phone} | Email: ${settings?.email}</p>
-                  </div>
-                </div>
-                <div class="a4-doc-info">
-                  <h1 class="a4-doc-type">${isQuotation ? 'COTIZACIÓN' : 'TICKET DE VENTA'}</h1>
-                  <p class="a4-doc-number">N° ${isQuotation ? `#C${String(lastQuotationId).padStart(6, '0')}` : `#V${String(lastSaleId).padStart(6, '0')}`}</p>
-                  <p class="a4-doc-date">Fecha: ${new Date().toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              <div class="a4-grid">
-                <div class="a4-section">
-                  <span class="a4-section-label">Información del Cliente</span>
-                  <h3 class="a4-client-name">${selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : 'Público General'}</h3>
-                  ${selectedCustomer?.dni ? `<p class="a4-client-detail"><strong>DNI/RUC:</strong> ${selectedCustomer.dni}</p>` : ''}
-                  ${selectedCustomer?.phone ? `<p class="a4-client-detail"><strong>Teléfono:</strong> ${selectedCustomer.phone}</p>` : ''}
-                  ${selectedCustomer?.address ? `<p class="a4-client-detail"><strong>Dirección:</strong> ${selectedCustomer.address}</p>` : ''}
-                </div>
-                <div class="a4-section">
-                  <span class="a4-section-label">Condiciones Comerciales</span>
-                  <div class="a4-condition-row">
-                    <span class="a4-condition-label">Validez:</span>
-                    <span class="a4-condition-value">7 Días Calendario</span>
-                  </div>
-                  <div class="a4-condition-row">
-                    <span class="a4-condition-label">Vencimiento:</span>
-                    <span class="a4-condition-value">${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
-                  </div>
-                  <div class="a4-condition-row">
-                    <span class="a4-condition-label">Moneda:</span>
-                    <span class="a4-condition-value">${settings?.currency === 'S/' ? 'Soles (PEN)' : settings?.currency || 'S/'}</span>
-                  </div>
-                  <div class="a4-condition-row">
-                    <span class="a4-condition-label">Vendedor:</span>
-                    <span class="a4-condition-value">${settings?.user_name || 'Admin'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <table class="a4-table">
-                <thead>
-                  <tr>
-                    <th class="col-num">N°</th>
-                    <th>Descripción del Producto / Servicio</th>
-                    <th class="col-qty">Cant.</th>
-                    <th class="col-price">P. Unit</th>
-                    <th class="col-total">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${cart.map((item, index) => `
-                    <tr>
-                      <td class="col-num">${index + 1}</td>
-                      <td class="col-desc">
-                        ${item.name}
-                        <div style="font-size: 9px; color: #888; font-weight: 500; margin-top: 2px;">SKU: ${item.code}</div>
-                        ${item.selectedSerials && item.selectedSerials.length > 0 ? `
-                          <div style="font-size: 8px; color: #555; margin-top: 2px; font-weight: 600;">
-                            S/N: ${item.selectedSerials.join(', ')}
-                          </div>
-                        ` : ''}
-                      </td>
-                      <td class="col-qty">${item.quantity}</td>
-                      <td class="col-price">${formatCurrency(item.sale_price)}</td>
-                      <td class="col-total">${formatCurrency(item.quantity * item.sale_price)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-
-              <div class="a4-summary-grid">
-                <div class="a4-extra-info">
-                  <h4>Cuentas Bancarias</h4>
-                  <div class="a4-bank-details">
-                    ${settings?.bank_bcp ? `<div class="a4-bank-row"><span class="a4-bank-label">BCP:</span> ${settings.bank_bcp}</div>` : ''}
-                    ${settings?.bank_cci ? `<div class="a4-bank-row"><span class="a4-bank-label">CCI:</span> ${settings.bank_cci}</div>` : ''}
-                    ${settings?.bank_yape_plin ? `<div class="a4-bank-row"><span class="a4-bank-label">Yape/Plin:</span> ${settings.bank_yape_plin}</div>` : ''}
-                    ${(!settings?.bank_bcp && !settings?.bank_cci && !settings?.bank_yape_plin) ? '<div style="font-style: italic; opacity: 0.5;">No se han configurado cuentas bancarias.</div>' : ''}
-                  </div>
-                  
-                  <h4>Términos y Condiciones</h4>
-                  <p style="font-size: 10px; color: #777; margin: 0;">
-                    ${warranty ? `• Garantía: ${warranty}<br>` : ''}
-                    • Precios sujetos a stock al momento de la compra.<br>
-                    • Todo pedido requiere confirmación de pago.<br>
-                    • Garantía directa con el fabricante.
-                  </p>
-                </div>
-                <div class="a4-totals-box">
-                  <div class="a4-total-line">
-                    <span style="font-weight: 600; color: #666;">Subtotal</span>
-                    <span style="font-weight: 700;">${formatCurrency(subtotal)}</span>
-                  </div>
-                  <div class="a4-total-line">
-                    <span style="font-weight: 600; color: #666;">IGV (0%)</span>
-                    <span style="font-weight: 700;">${formatCurrency(0)}</span>
-                  </div>
-                  <div class="a4-total-line grand-total">
-                    <span style="font-size: 12px; opacity: 0.8;">TOTAL NETO</span>
-                    <span>${formatCurrency(total)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="a4-signatures">
-              </div>
-
-              <div style="position: absolute; bottom: 20mm; right: 20mm; text-align: center;">
-                ${qrDataUrl ? `<img src="${qrDataUrl}" style="width: 80px; height: 80px; margin-bottom: 5px;" />` : ''}
-                <div style="font-size: 8px; font-weight: bold; color: #888;">VALIDAR COMPROBANTE</div>
-              </div>
+          <div class="qr-container">
+            ${qrDataUrl ? `<img src="${qrDataUrl}" />` : ''}
+            <div class="label">VALIDAR COMPROBANTE</div>
+            <div style="font-family: sans-serif; font-size: 10px; margin-top: 5px; color: #666;">
+              ${saleIdStr}
             </div>
-          ` : `
-            <div class="text-center">
-              ${settings?.business_logo ? `<img src="${settings.business_logo}" />` : `<div class="font-black uppercase" style="font-size: 18px; margin-bottom: 4px;">${settings?.business_name}</div>`}
-              <div style="font-size: 10px; margin-bottom: 2px;">${settings?.address}</div>
-              <div style="font-size: 10px; margin-bottom: 8px;">Telf: ${settings?.phone}</div>
-              
-              <div class="divider"></div>
-              <div class="font-bold uppercase" style="font-size: 12px; margin-bottom: 2px;">Ticket de Venta</div>
-              <div style="font-size: 9px; margin-bottom: 2px;">N° #V${String(lastSaleId).padStart(6, '0')}</div>
-              <div style="font-size: 9px; margin-bottom: 8px;">${new Date().toLocaleString()}</div>
-              
-              <div style="font-size: 9px; text-align: left; margin-bottom: 8px;">
-                CLIENTE: ${selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : 'PÚBLICO GENERAL'}<br>
-                ${selectedCustomer?.dni ? `DNI/RUC: ${selectedCustomer.dni}` : ''}
-              </div>
-              
-              <div class="divider"></div>
-              <div style="font-size: 9px; font-weight: bold; display: flex; margin-bottom: 4px;">
-                <span style="flex: 1; text-align: left;">DESCRIPCIÓN</span>
-                <span>TOTAL</span>
-              </div>
-              
-              ${cart.map(item => `
-                <div class="item-row">
-                  <div class="item-name">
-                    ${item.name}<br>
-                    <span style="font-weight: normal; font-size: 8px;">${item.quantity} x ${formatCurrency(item.sale_price)}</span>
-                    ${item.selectedSerials && item.selectedSerials.length > 0 ? `
-                      <div style="font-size: 7px; font-weight: normal; margin-top: 1px;">S/N: ${item.selectedSerials.join(', ')}</div>
-                    ` : ''}
-                  </div>
-                  <div class="font-bold">${formatCurrency(item.quantity * item.sale_price)}</div>
-                </div>
-              `).join('')}
-              
-              <div class="divider"></div>
-              
-              <div class="total-row">
-                <span>TOTAL</span>
-                <span>${formatCurrency(total)}</span>
-              </div>
-              
-              <div style="font-size: 9px; margin-top: 8px; text-align: left;">
-                <div style="font-weight: bold; margin-bottom: 2px;">PAGOS:</div>
-                ${payments.map(p => `
-                  <div style="display: flex; justify-content: space-between;">
-                    <span class="uppercase">${p.method.replace('_', '/')}</span>
-                    <span>${formatCurrency(p.amount)}</span>
-                  </div>
-                `).join('')}
-                ${change > 0 ? `
-                  <div style="display: flex; justify-content: space-between; font-weight: bold; color: #000; margin-top: 2px;">
-                    <span>VUELTO</span>
-                    <span>${formatCurrency(change)}</span>
-                  </div>
-                ` : ''}
-              </div>
-              
-              ${warranty ? `
-                <div style="font-size: 9px; margin-top: 8px; text-align: left; border: 1px solid #000; padding: 4px;">
-                  <span style="font-weight: bold;">GARANTÍA:</span> ${warranty}
-                </div>
-              ` : ''}
-              
-              <div class="divider"></div>
-              
-              ${qrDataUrl ? `
-                <div style="margin-top: 10px; margin-bottom: 10px;">
-                  <img src="${qrDataUrl}" style="width: 80px; height: 80px; margin: 0 auto;" />
-                  <div style="font-size: 7px; margin-top: 4px; opacity: 0.6;">ESCANEAR PARA VALIDAR</div>
-                </div>
-              ` : ''}
-
-              <div style="font-size: 9px; margin-top: 10px; font-style: italic;">
-                ${settings?.ticket_message || '¡Gracias por su compra!'}
-              </div>
-              
-              <div style="font-size: 8px; margin-top: 20px; opacity: 0.5;">
-              </div>
-            </div>
-          `}
+          </div>
           <script>
             window.onload = () => {
               window.print();
@@ -1662,105 +1200,59 @@ export default function POS() {
               )}
             >
               <div className={cn(
-                "p-4 space-y-3 max-h-[85vh] overflow-y-auto scrollbar-hide"
+                "p-8 flex flex-col items-center justify-center space-y-6 min-h-[400px]"
               )} ref={ticketRef}>
-                <div className="text-center space-y-1">
-                  {settings?.business_logo ? (
-                    <img 
-                      src={settings.business_logo} 
-                      alt="Logo" 
-                      className="w-16 h-16 object-contain mx-auto mb-2" 
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 bg-green-500 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-green-500/20 no-print">
-                      <Store size={32} />
-                    </div>
-                  )}
-                  <h3 className="text-xl font-black text-gray-900 uppercase break-words leading-tight">{settings?.business_name}</h3>
-                  <p className="text-xs text-gray-500 font-medium">{settings?.address}</p>
-                  <p className="text-xs text-gray-500 font-medium">Telf: {settings?.phone}</p>
-                </div>
-
-                <div className="border-y border-dashed border-gray-200 py-3 space-y-1">
-                  <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase">
-                    <span>{isQuotation ? 'Cotización' : 'Venta'}: #{isQuotation ? 'C' : 'V'}{String(isQuotation ? lastQuotationId : lastSaleId).padStart(6, '0')}</span>
-                    <span>{new Date().toLocaleString()}</span>
-                  </div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase">
-                    Cliente: {selectedCustomer ? `${selectedCustomer.first_name} ${selectedCustomer.last_name}` : 'Público General'}
+                <div className="text-center space-y-2">
+                  <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Comprobante Electrónico</h3>
+                  <p className="text-lg font-black text-gray-900">
+                    {isQuotation ? 'COTIZACIÓN' : 'VENTA'}: #{isQuotation ? 'C' : 'V'}{String(isQuotation ? lastQuotationId : lastSaleId).padStart(6, '0')}
                   </p>
-                  {selectedCustomer?.phone && (
-                    <p className="text-[10px] font-bold text-gray-400 uppercase">Telf: {selectedCustomer.phone}</p>
-                  )}
                 </div>
 
-                <div className="space-y-3">
-                  {cart.map(item => (
-                    <div key={item.id} className="flex justify-between text-xs">
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-900">{item.name}</p>
-                        <p className="text-gray-500">{item.quantity} x {formatCurrency(item.sale_price)}</p>
-                        {item.selectedSerials && item.selectedSerials.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {item.selectedSerials.map((sn: string) => (
-                              <span key={sn} className="text-[8px] bg-gray-100 px-1 rounded font-mono">{sn}</span>
-                            ))}
-                          </div>
-                        )}
+                <div className="relative group">
+                  <div className="absolute -inset-4 bg-primary/10 rounded-3xl blur-xl group-hover:bg-primary/20 transition-all duration-500" />
+                  <div className="relative bg-white p-6 rounded-2xl border-2 border-primary/20 shadow-xl">
+                    {qrDataUrl ? (
+                      <img 
+                        src={qrDataUrl} 
+                        alt="QR Code" 
+                        className="w-48 h-48 object-contain" 
+                      />
+                    ) : (
+                      <div className="w-48 h-48 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400">
+                        Generando QR...
                       </div>
-                      <span className="font-bold text-gray-900">{formatCurrency(item.quantity * item.sale_price)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-dashed border-gray-200 pt-3 space-y-2">
-                  <div className="flex justify-between text-lg pt-2">
-                    <span className="font-black text-gray-900">{isQuotation ? 'TOTAL COTIZACIÓN' : 'TOTAL'}</span>
-                    <span className="font-black text-green-600">{formatCurrency(total)}</span>
+                    )}
                   </div>
-                  {!isQuotation && (
-                    <div className="space-y-1">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase">Métodos de Pago:</p>
-                      {payments.map((p, idx) => (
-                        <div key={idx} className="flex justify-between text-[10px] font-bold text-gray-600">
-                          <span className="uppercase">{p.method.replace('_', '/')}</span>
-                          <span>{formatCurrency(p.amount)}</span>
-                        </div>
-                      ))}
-                      {change > 0 && (
-                        <div className="flex justify-between text-[10px] font-bold text-blue-600">
-                          <span>VUELTO</span>
-                          <span>{formatCurrency(change)}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                <div className="text-center space-y-2 pt-2 no-print">
-                  <p className="text-[10px] font-bold text-gray-400 italic">"{isQuotation ? 'Esta es una cotización informativa válida por 7 días.' : settings?.ticket_message}"</p>
-                  <div className="flex flex-col gap-1.5">
+                <div className="text-center space-y-1">
+                  <p className="text-xs font-black text-primary uppercase tracking-widest">Escanear para Validar</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase">Total: {formatCurrency(total)}</p>
+                </div>
+
+                <div className="w-full pt-6 space-y-3 no-print">
+                  <div className="flex flex-col gap-2">
                     {isQuotation ? (
                       <button 
                         onClick={handleDownloadPDF}
-                        className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors"
+                        className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 active:scale-[0.98]"
                       >
-                        <Download size={18} />
-                        Descargar Cotización (PDF)
+                        <Download size={20} />
+                        Descargar PDF
                       </button>
                     ) : (
                       <button 
                         onClick={handlePrint}
-                        className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors"
+                        className="w-full bg-gray-900 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 hover:bg-gray-800 transition-all shadow-lg shadow-gray-900/20 active:scale-[0.98]"
                       >
-                        <Ticket size={18} />
-                        Imprimir
+                        <Ticket size={20} />
+                        Imprimir Ticket
                       </button>
                     )}
                     <button 
                       onClick={resetSale}
-                      className="w-full bg-green-500 text-white font-bold py-3 rounded-xl hover:bg-green-600 transition-colors"
+                      className="w-full bg-primary text-white font-bold py-4 rounded-2xl hover:opacity-90 transition-all shadow-lg shadow-primary/20 active:scale-[0.98]"
                     >
                       {isQuotation ? 'Continuar Venta' : 'Nueva Venta'}
                     </button>
