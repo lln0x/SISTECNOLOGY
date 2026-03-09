@@ -1662,7 +1662,7 @@ export default function POS() {
               )}
             >
               <div className={cn(
-                "p-6 space-y-4 max-h-[85vh] overflow-y-auto scrollbar-hide"
+                "p-4 space-y-3 max-h-[85vh] overflow-y-auto scrollbar-hide"
               )} ref={ticketRef}>
                 <div className="text-center space-y-1">
                   {settings?.business_logo ? (
@@ -1738,9 +1738,9 @@ export default function POS() {
                   )}
                 </div>
 
-                <div className="text-center space-y-3 pt-3 no-print">
-                  <p className="text-xs font-bold text-gray-500 italic">"{isQuotation ? 'Esta es una cotización informativa válida por 7 días.' : settings?.ticket_message}"</p>
-                  <div className="flex flex-col gap-2">
+                <div className="text-center space-y-2 pt-2 no-print">
+                  <p className="text-[10px] font-bold text-gray-400 italic">"{isQuotation ? 'Esta es una cotización informativa válida por 7 días.' : settings?.ticket_message}"</p>
+                  <div className="flex flex-col gap-1.5">
                     {isQuotation ? (
                       <button 
                         onClick={handleDownloadPDF}

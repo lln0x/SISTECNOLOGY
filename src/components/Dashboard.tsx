@@ -43,7 +43,10 @@ const categoryData = [
   { name: 'Limpieza', value: 200 },
 ];
 
-const COLORS = ['#22c55e', '#16a34a', '#4ade80', '#86efac'];
+const COLORS = [
+  '#22c55e', '#16a34a', '#4ade80', '#86efac', '#bbf7d0',
+  '#3b82f6', '#2563eb', '#60a5fa', '#93c5fd', '#bfdbfe'
+];
 
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -95,8 +98,8 @@ export default function Dashboard() {
     },
   ];
 
-  const salesTrendData = stats?.salesTrend?.length > 0 ? stats.salesTrend : data;
-  const salesByCategoryData = stats?.salesByCategory?.length > 0 ? stats.salesByCategory : categoryData;
+  const salesTrendData = stats?.salesTrend || [];
+  const salesByCategoryData = stats?.salesByCategory || [];
   const recentSalesData = stats?.recentSales || [];
   const lowStockProductsData = stats?.lowStockProducts || [];
 
@@ -176,37 +179,57 @@ export default function Dashboard() {
           "bg-white border-gray-100 dark:bg-gray-900 dark:border-gray-800"
         )}>
           <h3 className="font-bold text-gray-900 dark:text-white mb-6">Ventas por Categoría</h3>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={salesByCategoryData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                  nameKey="name"
-                >
-                  {salesByCategoryData.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="h-[300px] flex flex-col items-center justify-center">
+            {salesByCategoryData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={salesByCategoryData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    nameKey="name"
+                  >
+                    {salesByCategoryData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    contentStyle={{ 
+                      borderRadius: '12px', 
+                      border: 'none', 
+                      boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                      backgroundColor: 'var(--tooltip-bg, #fff)',
+                      color: 'var(--tooltip-text, #000)'
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto">
+                  <PieChart className="text-gray-400" size={24} />
+                </div>
+                <p className="text-sm text-gray-500">No hay ventas registradas</p>
+              </div>
+            )}
           </div>
-          <div className="space-y-3 mt-4">
-            {salesByCategoryData.map((cat: any, i: number) => (
+          <div className="space-y-3 mt-4 max-h-[200px] overflow-y-auto pr-2 scrollbar-hide">
+            {salesByCategoryData.length > 0 ? salesByCategoryData.map((cat: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  <span className="text-gray-600 dark:text-gray-400">{cat.name}</span>
+                  <span className="text-gray-600 dark:text-gray-400 truncate max-w-[150px]">{cat.name}</span>
                 </div>
                 <span className="font-bold text-gray-900 dark:text-white">{formatCurrency(cat.value)}</span>
               </div>
-            ))}
+            )) : (
+              <p className="text-xs text-center text-gray-400 italic">Registra ventas para ver estadísticas</p>
+            )}
           </div>
         </div>
       </div>

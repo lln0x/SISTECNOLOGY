@@ -61,9 +61,12 @@ db.exec(`
     supplier_id INTEGER,
     status TEXT DEFAULT 'active',
     has_serials INTEGER DEFAULT 0,
+    parent_id INTEGER,
+    units_per_package INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id),
-    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id),
+    FOREIGN KEY (parent_id) REFERENCES products(id)
   );
 
   CREATE TABLE IF NOT EXISTS product_items (
@@ -244,6 +247,20 @@ if (settingsCount.count === 0) {
   // Add DNI column if it doesn't exist
   try {
     db.prepare("ALTER TABLE customers ADD COLUMN dni TEXT UNIQUE").run();
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add parent_id column to products if it doesn't exist
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN parent_id INTEGER").run();
+  } catch (e) {
+    // Column already exists
+  }
+
+  // Add units_per_package column to products if it doesn't exist
+  try {
+    db.prepare("ALTER TABLE products ADD COLUMN units_per_package INTEGER DEFAULT 1").run();
   } catch (e) {
     // Column already exists
   }
@@ -463,16 +480,19 @@ async function startServer() {
         ORDER BY date(created_at) ASC
       `).all();
 
-      // Sales by Category
+      // Sales by Category (Last 90 days)
       const salesByCategory = db.prepare(`
-        SELECT c.name, SUM(si.subtotal) as value
+        SELECT 
+          COALESCE(c.name, 'Sin Categoría') as name, 
+          SUM(si.subtotal) as value
         FROM sale_items si
-        JOIN products p ON si.product_id = p.id
-        JOIN categories c ON p.category_id = c.id
+        LEFT JOIN products p ON si.product_id = p.id
+        LEFT JOIN categories c ON p.category_id = c.id
         JOIN sales s ON si.sale_id = s.id
-        GROUP BY c.id
+        WHERE s.created_at >= date('now', '-90 days')
+        GROUP BY COALESCE(c.name, 'Sin Categoría')
         ORDER BY value DESC
-        LIMIT 5
+        LIMIT 10
       `).all();
 
       // Recent Sales
@@ -569,11 +589,38 @@ async function startServer() {
       LEFT JOIN categories c ON p.category_id = c.id
     `).all() as any[];
     
-    // If has_serials is 1, use dynamic_stock as stock
-    const processedProducts = products.map(p => ({
-      ...p,
-      stock: p.has_serials ? p.dynamic_stock : p.stock
-    }));
+    // Create a map for quick parent lookup
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    // Process products to handle linked inventory and serials
+    const processedProducts = products.map(p => {
+      let stock = p.has_serials ? p.dynamic_stock : p.stock;
+      let status = p.status;
+      
+      // If it has a parent, stock is based on parent's stock
+      if (p.parent_id) {
+        const parent = productMap.get(p.parent_id);
+        if (parent) {
+          const parentStock = parent.has_serials ? 
+            (db.prepare("SELECT COUNT(*) as count FROM product_items WHERE product_id = ? AND status = 'available'").get(p.parent_id) as any).count : 
+            parent.stock;
+          
+          const unitsPerPackage = p.units_per_package || 1;
+          stock = Math.floor(parentStock / unitsPerPackage);
+          
+          // Automatically deactivate if not enough stock for a full package
+          if (parentStock < unitsPerPackage) {
+            status = 'inactive';
+          }
+        }
+      }
+
+      return {
+        ...p,
+        stock,
+        status
+      };
+    });
     
     res.json(processedProducts);
   });
@@ -584,7 +631,7 @@ async function startServer() {
   });
 
   app.post("/api/products", (req, res) => {
-    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers } = req.body;
+    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers, parent_id, units_per_package } = req.body;
     
     // Generate code
     const category = db.prepare("SELECT prefix FROM categories WHERE id = ?").get(category_id) as any;
@@ -616,9 +663,9 @@ async function startServer() {
       }
 
       const info = db.prepare(`
-        INSERT INTO products (code, name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(code, name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, has_serials ? 1 : 0);
+        INSERT INTO products (code, name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, parent_id, units_per_package)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(code, name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, has_serials ? 1 : 0, parent_id || null, units_per_package || 1);
       
       const productId = info.lastInsertRowid;
 
@@ -760,7 +807,7 @@ async function startServer() {
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(saleId, item.id, item.quantity, item.price, item.quantity * item.price, JSON.stringify(item.serial_numbers || []));
         
-        const product = db.prepare("SELECT has_serials FROM products WHERE id = ?").get(item.id) as any;
+        const product = db.prepare("SELECT has_serials, parent_id, units_per_package FROM products WHERE id = ?").get(item.id) as any;
         
         if (product && product.has_serials) {
           // Delete specific items as they are sold and should not be kept in product_items
@@ -782,6 +829,9 @@ async function startServer() {
               deleteItem.run(pi.id);
             }
           }
+        } else if (product && product.parent_id) {
+          // Subtract from parent stock
+          db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity * (product.units_per_package || 1), product.parent_id);
         } else {
           db.prepare("UPDATE products SET stock = stock - ? WHERE id = ?").run(item.quantity, item.id);
         }
@@ -838,7 +888,7 @@ async function startServer() {
 
   app.put("/api/products/:id", (req, res) => {
     const { id } = req.params;
-    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers } = req.body;
+    const { name, category_id, purchase_price, sale_price, stock, min_stock, unit, brand, supplier_id, description, image, has_serials, serial_numbers, parent_id, units_per_package } = req.body;
     
     // Check if category changed to regenerate code
     const currentProduct = db.prepare("SELECT category_id, code FROM products WHERE id = ?").get(id) as any;
@@ -873,9 +923,9 @@ async function startServer() {
 
       db.prepare(`
         UPDATE products 
-        SET name = ?, category_id = ?, purchase_price = ?, sale_price = ?, stock = ?, min_stock = ?, unit = ?, brand = ?, supplier_id = ?, description = ?, image = ?, code = ?, has_serials = ?
+        SET name = ?, category_id = ?, purchase_price = ?, sale_price = ?, stock = ?, min_stock = ?, unit = ?, brand = ?, supplier_id = ?, description = ?, image = ?, code = ?, has_serials = ?, parent_id = ?, units_per_package = ?
         WHERE id = ?
-      `).run(name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, code, has_serials ? 1 : 0, id);
+      `).run(name, category_id, purchase_price, sale_price, has_serials ? 0 : stock, min_stock, unit, brand, supplier_id, description, image, code, has_serials ? 1 : 0, parent_id || null, units_per_package || 1, id);
 
       if (has_serials && Array.isArray(serial_numbers)) {
         const currentItems = db.prepare("SELECT serial_number FROM product_items WHERE product_id = ?").all(id) as any[];

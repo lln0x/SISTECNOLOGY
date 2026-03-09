@@ -33,6 +33,8 @@ export interface Product {
   supplier_id?: number;
   status: 'active' | 'inactive';
   has_serials?: boolean;
+  parent_id?: number;
+  units_per_package?: number;
   created_at: string;
   items?: ProductItem[];
 }
